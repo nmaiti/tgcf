@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from pydantic import BaseModel  # pylint: disable=no-name-in-module
 
 from tgcf.plugins import FileType, TgcfMessage, TgcfPlugin
+from tgcf.utils import match
 
 
 class FilterList(BaseModel):
@@ -18,6 +19,7 @@ class FilesFilterList(BaseModel):
 
 class TextFilter(FilterList):
     case_sensitive: bool = False
+    regex: bool = False
 
 
 class Filters(BaseModel):
@@ -30,7 +32,6 @@ class TgcfFilter(TgcfPlugin):
     id_ = "filter"
 
     def __init__(self, data: Dict[str, Any]) -> None:
-        print("tgcf filter data loaded")
         self.filters = Filters(**data)
         self.case_correct()
         logging.info(self.filters)
@@ -38,15 +39,18 @@ class TgcfFilter(TgcfPlugin):
     def case_correct(self) -> None:
         textf: TextFilter = self.filters.text
 
-        if textf.case_sensitive is False:
+        if textf.case_sensitive is False and textf.regex is False:
             textf.blacklist = [item.lower() for item in textf.blacklist]
             textf.whitelist = [item.lower() for item in textf.whitelist]
 
     def modify(self, tm: TgcfMessage) -> TgcfMessage:
 
         if self.users_safe(tm):
+            logging.info("Message passed users filter")
             if self.files_safe(tm):
+                logging.info("Message passed files filter")
                 if self.text_safe(tm):
+                    logging.info("Message passed text filter")
                     return tm
 
     def text_safe(self, tm: TgcfMessage) -> bool:
@@ -58,19 +62,22 @@ class TgcfFilter(TgcfPlugin):
         if not text and flist.whitelist == []:
             return True
 
+        # first check if any blacklisted pattern is present
         for forbidden in flist.blacklist:
-            if forbidden in text:
-                return False
+            if match(forbidden, text, self.filters.text.regex):
+                return False  # when a forbidden pattern is found
+
         if not flist.whitelist:
-            return True
+            return True  # if no whitelist is present
+
+        # if whitelist is present
         for allowed in flist.whitelist:
-            if allowed in text:
-                return True
+            if match(allowed, text, self.filters.text.regex):
+                return True  # only when atleast one whitelisted pattern is found
 
     def users_safe(self, tm: TgcfMessage) -> bool:
         flist = self.filters.users
         sender = str(tm.sender_id)
-        logging.info(f"M message from sender id {sender}")
         if sender in flist.blacklist:
             return False
         if not flist.whitelist:
@@ -81,7 +88,6 @@ class TgcfFilter(TgcfPlugin):
     def files_safe(self, tm: TgcfMessage) -> bool:
         flist = self.filters.files
         fl_type = tm.file_type
-        print(fl_type)
         if fl_type in flist.blacklist:
             return False
         if not flist.whitelist:

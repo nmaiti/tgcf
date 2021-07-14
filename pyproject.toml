@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tgcf"
-version = "0.2.1"
+version = "0.2.11.post0"
 description = "The ultimate tool to automate custom telegram message forwarding."
 authors = ["aahnik <daw@aahnik.dev>"]
 license = "MIT"
@@ -15,7 +15,7 @@ typer = "^0.3.2"
 python-dotenv = "^0.17.0"
 PyYAML = "^5.4.1"
 pydantic = "^1.8.1"
-Telethon = "^1.20"
+Telethon = "1.21.1"
 cryptg = "^0.2.post2"
 Pillow = "^8.1.2"
 hachoir = "^3.1.2"
@@ -23,16 +23,15 @@ aiohttp = "^3.7.4"
 tg-login = "^0.0.2"
 "watermark.py" = "^0.0.3"
 pytesseract = "^0.3.7"
+rich = "^10.3.0"
+pyfiglet = "^0.8.post1"
+verlat = "^0.1.0"
 
 [tool.poetry.dev-dependencies]
-pytest = "^5.2"
-autopep8 = "^1.5.5"
-pylint = "^2.7.4"
 typer-cli = "^0.0.11"
 black = {version = "^20.8b1", allow-prereleases = true}
-mkdocs-gen-files = "^0.3.1"
 isort = "^5.8.0"
-pydocstyle = "^6.0.0"
+pre-commit = "^2.13.0"
 
 
 [tool.poetry.scripts]

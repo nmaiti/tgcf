@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Union
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, validator  # pylint: disable=no-name-in-module
+from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 from tgcf.const import CONFIG_ENV_VAR_NAME, CONFIG_FILE_NAME
@@ -20,9 +21,9 @@ class Forward(BaseModel):
 
     # pylint: disable=too-few-public-methods
     source: Union[int, str]
-    dest: List[Union[int, str]]
+    dest: List[Union[int, str]] = []
     offset: int = 0
-    end: Optional[int] = None
+    end: Optional[int] = 0
 
 
 class LiveSettings(BaseModel):
@@ -55,11 +56,11 @@ class Config(BaseModel):
     """The blueprint for tgcf's whole config."""
 
     # pylint: disable=too-few-public-methods
+    admins: List[Union[int, str]] = []
     forwards: List[Forward] = []
     show_forwarded_from: bool = False
     live: LiveSettings = LiveSettings()
     past: PastSettings = PastSettings()
-    admins: List[int] = []
 
     plugins: Dict = {}
 
@@ -69,16 +70,16 @@ def detect_config_type() -> int:
     tutorial_link = "Learn more http://bit.ly/configure-tgcf"
 
     if CONFIG_FILE_NAME in os.listdir():
-        logging.info(f"{CONFIG_FILE_NAME} detected.")
+        logging.info(f"{CONFIG_FILE_NAME} detected")
         return 1
     if os.getenv("TGCF_CONFIG"):
-        logging.info(f"env var {CONFIG_ENV_VAR_NAME} detected.")
+        logging.info(f"env var {CONFIG_ENV_VAR_NAME} detected")
         if not ".env" in os.listdir():
             return 2
 
         logging.warning(
             f"If you can create files in your system,\
-            you should use tgcf.config.yml and not .env to define configuration. {tutorial_link}"
+            you should use tgcf.config.yml and not .env to define configuration {tutorial_link}"
         )
         sys.exit(1)
     else:
@@ -91,7 +92,7 @@ CONFIG_TYPE = detect_config_type()
 def read_config() -> Config:
     """Load the configuration defined by user."""
     if CONFIG_TYPE == 1:
-        with open(CONFIG_FILE_NAME) as file:
+        with open(CONFIG_FILE_NAME, encoding="utf8") as file:
             config_dict = yaml.full_load(file)
     elif CONFIG_TYPE == 2:
         config_env_var = os.getenv("TGCF_CONFIG")
@@ -105,7 +106,7 @@ def read_config() -> Config:
         else:
             config = Config()
     except Exception as err:
-        print(err)
+        logging.exception(err)
         sys.exit(1)
     else:
         logging.info(config)
@@ -115,8 +116,8 @@ def read_config() -> Config:
 def write_config(config: Config):
     """Write changes in config back to file."""
     if CONFIG_TYPE == 1 or CONFIG_TYPE == 0:
-        with open(CONFIG_FILE_NAME, "w") as file:
-            yaml.dump(config.dict(), file, sort_keys=False, default_flow_style=None)
+        with open(CONFIG_FILE_NAME, "w", encoding="utf8") as file:
+            yaml.dump(config.dict(), file, sort_keys=False, allow_unicode=True)
     elif CONFIG_TYPE == 2:
         logging.warning("Could not update config! As env var is used")
 
@@ -148,14 +149,51 @@ else:
 CONFIG = read_config()
 
 
-def load_from_to(forwards: List[Forward]) -> Dict:
-    """Load a from -> to mapping."""
+async def get_id(client: TelegramClient, peer):
+    return await client.get_peer_id(peer)
+
+
+async def load_from_to(
+    client: TelegramClient, forwards: List[Forward]
+) -> Dict[int, List[int]]:
+    """Convert a list of Forward objects to a mapping.
+
+    Args:
+        client: Instance of Telegram client (logged in)
+        forwards: List of Forward objects
+
+    Returns:
+        Dict: key = chat id of source
+                value = List of chat ids of destinations
+
+    Notes:
+    -> The Forward objects may contain username/phn no/links
+    -> But this mapping strictly contains signed integer chat ids
+    -> Chat ids are essential for how storage is implemented
+    -> Storage is essential for edit, delete and reply syncs
+    """
     from_to_dict = {}
+
+    async def _(peer):
+        return await get_id(client, peer)
+
     for forward in forwards:
-        from_to_dict[forward.source] = forward.dest
+        src = await _(forward.source)
+        from_to_dict[src] = [await _(dest) for dest in forward.dest]
+    logging.info(f"From to dict is {from_to_dict}")
     return from_to_dict
 
 
-from_to = load_from_to(CONFIG.forwards)
+ADMINS = []
 
+
+async def load_admins(client: TelegramClient):
+    for admin in CONFIG.admins:
+        ADMINS.append(await get_id(client, admin))
+    logging.info(f"Loaded admins are {ADMINS}")
+    return ADMINS
+
+
+from_to = {}
+is_bot: Optional[bool] = None
 logging.info("config.py got executed")
