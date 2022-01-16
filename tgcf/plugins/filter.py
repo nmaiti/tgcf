@@ -47,11 +47,10 @@ class TgcfFilter(TgcfPlugin):
 
         if self.users_safe(tm):
             logging.info("Message passed users filter")
-            if self.files_safe(tm):
-                logging.info("Message passed files filter")
-                if self.text_safe(tm):
-                    logging.info("Message passed text filter")
-                    return tm
+#           # check either pix or msg filter  passing"
+            if self.text_safe(tm) or self.files_safe(tm):
+                logging.info("Message passed text/pix filter")
+                return tm
 
     def text_safe(self, tm: TgcfMessage) -> bool:
         flist = self.filters.text
